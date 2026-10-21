@@ -801,12 +801,64 @@ public:
         return true;
     }
 
-    static bool HandleReloadTransmogConfig(ChatHandler* handler)
+    // .transmog reload                  -> reload module config and collections (upstream behaviour)
+    // .transmog reload <character>      -> re-read one online player's transmogs from custom_transmogrification
+    //                                      and refresh their visible items (used by ezCollectionsHelper)
+    static bool HandleReloadTransmogConfig(ChatHandler* handler, Optional<PlayerIdentifier> player)
     {
-        sTransmogrification->LoadConfig(true);
-        handler->SendSysMessage("Transmog configs reloaded.");
-        sTransmogrification->LoadCollections();
-        handler->SendSysMessage("Transmog collections reloaded.");
+        if (!player)
+        {
+            sTransmogrification->LoadConfig(true);
+            handler->SendSysMessage("Transmog configs reloaded.");
+            sTransmogrification->LoadCollections();
+            handler->SendSysMessage("Transmog collections reloaded.");
+            return true;
+        }
+
+        Player* target = player->GetConnectedPlayer();
+        if (!target)
+        {
+            handler->SendSysMessage("Player must be online to reload their transmogs.");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        ObjectGuid playerGUID = target->GetGUID();
+
+        // Drop whatever is currently cached for this player so removed transmogs don't linger
+        auto cached = sTransmogrification->entryMap.find(playerGUID);
+        if (cached != sTransmogrification->entryMap.end())
+        {
+            for (auto const& itemEntry : cached->second)
+                sTransmogrification->dataMap.erase(itemEntry.first);
+
+            sTransmogrification->entryMap.erase(cached);
+        }
+
+        if (QueryResult result = CharacterDatabase.Query("SELECT GUID, FakeEntry FROM custom_transmogrification WHERE Owner = {}", playerGUID.GetCounter()))
+        {
+            do
+            {
+                ObjectGuid itemGUID = ObjectGuid::Create<HighGuid::Item>((*result)[0].Get<uint32>());
+                uint32 fakeEntry = (*result)[1].Get<uint32>();
+                if (fakeEntry == HIDDEN_ITEM_ID || sObjectMgr->GetItemTemplate(fakeEntry))
+                {
+                    sTransmogrification->dataMap[itemGUID] = playerGUID;
+                    sTransmogrification->entryMap[playerGUID][itemGUID] = fakeEntry;
+                }
+            } while (result->NextRow());
+        }
+
+        for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+        {
+            if (Item* item = target->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+            {
+                target->SetVisibleItemSlot(slot, item);
+                if (target->IsInWorld())
+                    item->SendUpdateToPlayer(target);
+            }
+        }
+
         return true;
     }
 };

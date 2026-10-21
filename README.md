@@ -71,3 +71,10 @@ This module is released under the [GNU AGPL license](https://github.com/azerothc
 
 
 
+
+## ezCollectionsHelper support
+
+`.transmog reload <character>` re-reads an online player's rows from `custom_transmogrification`
+and refreshes their visible items. `ezCollectionsHelper` (Eluna) runs it after writing an applied
+transmog to the database. Running `.transmog reload` with no argument still reloads the module
+config and collections as before.
