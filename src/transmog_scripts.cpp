@@ -705,10 +705,20 @@ private:
         sT->AddToDatabase(player, itemTemplate);
     }
 
+    // One-time backfill for items the character already owns. It has to follow the same rules as the live
+    // hooks: worn items are collected (equipping collects), but an item that is only sitting in a bag or the
+    // bank is collected only when it is already soulbound. Unbound items (Bind on Equip, not yet worn) must
+    // stay uncollected, otherwise their appearance could be unlocked and the item then traded or sold.
     void CheckRetroActiveInventoryAppearances(Player* player)
     {
         if (!sT->GetUseCollectionSystem())
             return;
+
+        auto addIfBound = [this, player](Item* item)
+        {
+            if (item && item->IsSoulBound())
+                AddToDatabase(player, item);
+        };
 
         for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
         {
@@ -717,10 +727,7 @@ private:
         }
 
         for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
-        {
-            if (Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
-                AddToDatabase(player, item);
-        }
+            addIfBound(player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot));
 
         for (uint8 bagPos = INVENTORY_SLOT_BAG_START; bagPos < INVENTORY_SLOT_BAG_END; ++bagPos)
         {
@@ -729,17 +736,11 @@ private:
                 continue;
 
             for (uint32 slot = 0; slot < bag->GetBagSize(); ++slot)
-            {
-                if (Item* item = player->GetItemByPos(bagPos, slot))
-                    AddToDatabase(player, item);
-            }
+                addIfBound(player->GetItemByPos(bagPos, slot));
         }
 
         for (uint8 slot = BANK_SLOT_ITEM_START; slot < BANK_SLOT_ITEM_END; ++slot)
-        {
-            if (Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
-                AddToDatabase(player, item);
-        }
+            addIfBound(player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot));
 
         for (uint8 bagPos = BANK_SLOT_BAG_START; bagPos < BANK_SLOT_BAG_END; ++bagPos)
         {
@@ -748,10 +749,7 @@ private:
                 continue;
 
             for (uint32 slot = 0; slot < bag->GetBagSize(); ++slot)
-            {
-                if (Item* item = player->GetItemByPos(bagPos, slot))
-                    AddToDatabase(player, item);
-            }
+                addIfBound(player->GetItemByPos(bagPos, slot));
         }
     }
 
