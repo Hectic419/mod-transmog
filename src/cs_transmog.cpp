@@ -138,6 +138,14 @@ public:
         uint32 accountId = sCharacterCache->GetCharacterAccountIdByGuid(guid);
         uint32 itemId = itemTemplate->ItemId;
 
+        // ezCollections: deprecated, test and placeholder items and NPC equipment are never appearances
+        if (sTransmogrification->IsExcludedAppearance(itemId))
+        {
+            handler->PSendSysMessage("Item {} is not an appearance (left out by the Collections helper).", itemId);
+            handler->SetSentErrorMessage(true);
+            return true;
+        }
+
         std::stringstream tempStream;
         tempStream << std::hex << ItemQualityColors[itemTemplate->Quality];
         std::string itemQuality = tempStream.str();

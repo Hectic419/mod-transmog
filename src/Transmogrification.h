@@ -238,6 +238,7 @@ public:
     // these are thread unsafe, but assumed to be static data so it should be safe
     std::set<uint32> Allowed;
     std::set<uint32> NotAllowed;
+    std::unordered_set<uint32> ExcludedAppearances;
 
     float ScaledCostModifier;
     int32 CopperCost;
@@ -288,6 +289,11 @@ public:
 
     bool IsAllowed(uint32 entry) const;
     bool IsNotAllowed(uint32 entry) const;
+    // ezCollections: items the Collections helper leaves out of the Appearances tab (deprecated, test and
+    // placeholder items, NPC equipment). They are never collected. Read from the characters table
+    // custom_ezCollectionsHelperExcludedAppearances, which the helper writes, whenever the config is loaded.
+    bool IsExcludedAppearance(uint32 entry) const;
+    void LoadExcludedAppearances();
     bool IsAllowedQuality(uint32 quality, ObjectGuid const & playerGuid) const;
     bool IsRangedWeapon(uint32 Class, uint32 SubClass) const;
     bool CanNeverTransmog(ItemTemplate const* itemTemplate);
