@@ -466,6 +466,10 @@ void Transmogrification::SetFakeEntry(Player* player, uint32 newEntry, uint8 /*s
 
 bool Transmogrification::AddCollectedAppearance(uint32 accountId, uint32 itemId)
 {
+    // ezCollections: left out items are never collected (equip, loot, quest, purchase, .transmog add, loading)
+    if (IsExcludedAppearance(itemId))
+        return false;
+
     if (!collectionCache.contains(accountId))
     {
         collectionCache.insert({ accountId, {itemId} });
@@ -1069,6 +1073,41 @@ bool Transmogrification::IsNotAllowed(uint32 entry) const
     return NotAllowed.find(entry) != NotAllowed.end();
 }
 
+bool Transmogrification::IsExcludedAppearance(uint32 entry) const
+{
+    return ExcludedAppearances.find(entry) != ExcludedAppearances.end();
+}
+
+void Transmogrification::LoadExcludedAppearances()
+{
+    ExcludedAppearances.clear();
+
+    // The table is created by the Collections helper; AzerothCore aborts on a query naming a missing table,
+    // so check that it exists first. Without it nothing is excluded (stock behaviour).
+    QueryResult exists = CharacterDatabase.Query("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'custom_ezCollectionsHelperExcludedAppearances' LIMIT 1");
+    if (!exists)
+        return;
+
+    if (QueryResult result = CharacterDatabase.Query("SELECT item_template_id FROM custom_ezCollectionsHelperExcludedAppearances"))
+    {
+        do
+        {
+            ExcludedAppearances.insert((*result)[0].Get<uint32>());
+        } while (result->NextRow());
+    }
+
+    // An item collected before it was excluded stays in custom_unlocked_appearances (nothing is deleted),
+    // but it is no longer part of anyone's collection.
+    uint32 dropped = 0;
+    for (auto& [accountId, items] : collectionCache)
+    {
+        for (uint32 itemId : ExcludedAppearances)
+            dropped += items.erase(itemId);
+    }
+
+    LOG_INFO("module", "Transmog: {} excluded appearances loaded ({} cached unlocks ignored)", ExcludedAppearances.size(), dropped);
+}
+
 bool Transmogrification::IsAllowedQuality(uint32 quality, ObjectGuid const &playerGuid) const
 {
     switch (quality)
@@ -1146,6 +1185,8 @@ void Transmogrification::LoadConfig(bool reload)
             break;
         NotAllowed.insert(entry);
     }
+
+    LoadExcludedAppearances();
 
     ScaledCostModifier = sConfigMgr->GetOption<float>("Transmogrification.ScaledCostModifier", 1.0f);
     CopperCost = sConfigMgr->GetOption<uint32>("Transmogrification.CopperCost", 0);
